@@ -1,0 +1,195 @@
+#pragma kernel TriangleBinning
+#pragma kernel RasterizeTiles
+#pragma kernel ClearRenderTargets
+
+#define TILE_WIDTH   8
+#define TILE_HEIGHT  8
+
+struct Triangle
+{
+    float2 v0;
+    float2 v1;
+    float2 v2;
+    
+    float z0;
+    float z1;
+    float z2;
+
+    float2 uv0;
+    float2 uv1;
+    float2 uv2;
+
+    float w0;
+    float w1;
+    float w2;
+};
+
+uint2 resolution;
+uint tilesX;
+uint tilesY;
+
+StructuredBuffer<Triangle> trianglesRead;
+StructuredBuffer<uint> triangleCounter;
+
+StructuredBuffer<uint2> tileRanges;
+RWStructuredBuffer<uint> tileWriteOffsets;
+
+RWStructuredBuffer<uint> tileTriIndicesWrite;
+StructuredBuffer<uint> tileTriIndicesRead;
+
+RWTexture2D<float4> colorBuffer;
+RWTexture2D<float> depthBuffer;
+
+Texture2D<float4> _MainTex;
+SamplerState sampler_MainTex;
+
+float Edges(float2 a, float2 b, float2 p)
+{
+    float2 ab = b - a;
+    float2 ap = p - a;
+    return ab.x * ap.y - ab.y * ap.x;
+}
+
+[numthreads(1, 1, 1)]
+void TriangleBinning(uint id : SV_DispatchThreadID)
+{
+    uint triCount = triangleCounter[0];
+    
+    if (id >= triCount)
+    {
+        return;
+    }
+    
+    Triangle tri = trianglesRead[id];
+
+    float2 minP = min(tri.v0, min(tri.v1, tri.v2));
+    float2 maxP = max(tri.v0, max(tri.v1, tri.v2));
+
+    int minTileX = clamp((int) floor(minP.x / TILE_WIDTH), 0, tilesX - 1);
+    int maxTileX = clamp((int) floor(maxP.x / TILE_WIDTH), 0, tilesX - 1);
+    int minTileY = clamp((int) floor(minP.y / TILE_HEIGHT), 0, tilesY - 1);
+    int maxTileY = clamp((int) floor(maxP.y / TILE_HEIGHT), 0, tilesY - 1);
+
+    for (int ty = minTileY; ty <= maxTileY; ty++)
+    {
+        for (int tx = minTileX; tx <= maxTileX; tx++)
+        {
+            uint tileIndex = ty * tilesX + tx;
+
+            uint prevCount;
+            InterlockedAdd(tileWriteOffsets[tileIndex], 1, prevCount);
+
+            uint baseOffset = tileRanges[tileIndex].x;
+            tileTriIndicesWrite[baseOffset + prevCount] = id;
+        }
+    }
+}
+
+[numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
+void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    uint tileIndex = gid.y * tilesX + gid.x;
+    
+    uint tileCount = tilesX * tilesY;
+    
+    if (tileIndex >= tileCount)
+    {
+        return;
+    }
+    
+    uint count = tileWriteOffsets[tileIndex];
+    
+    if (count == 0)
+    {
+        return;
+    }
+    
+    uint2 range = tileRanges[tileIndex];
+    
+    uint start = range.x;
+
+    uint tileX = tileIndex % tilesX;
+    
+    uint tileY = tileIndex / tilesX;
+
+    int2 pixel = int2((int) (tileX * TILE_WIDTH + tid.x), (int) (tileY * TILE_HEIGHT + tid.y));
+
+    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= (int) resolution.x || pixel.y >= (int) resolution.y)
+    {
+        return;
+    }
+    
+    float tinyNumber = 1e-6f;
+    
+    float bigNumber = 1e9;
+
+    float2 p = (float2) pixel + 0.5;
+    
+    float pixelZ = bigNumber;
+    
+    float4 pixelCol = float4(0, 0, 0, 0);
+
+    for (uint i = 0; i < count; i++)
+    {
+        Triangle tri = trianglesRead[tileTriIndicesRead[start + i]];
+
+        float area = Edges(tri.v0, tri.v1, tri.v2);
+        
+        if (area >= 0.0)
+        {
+            continue;
+        }
+        
+        float w0 = Edges(tri.v1, tri.v2, p);
+        float w1 = Edges(tri.v2, tri.v0, p);
+        float w2 = Edges(tri.v0, tri.v1, p);
+
+        float invArea = 1.0f / area;
+        w0 *= invArea;
+        w1 *= invArea;
+        w2 *= invArea;
+
+        if (w0 < -tinyNumber || w1 < -tinyNumber || w2 < -tinyNumber)
+        {
+            continue;
+        }
+        
+        float z = w0 * tri.z0 + w1 * tri.z1 + w2 * tri.z2;
+        
+        if (z >= pixelZ)
+        {
+            continue;
+        } 
+
+        float uvDen = w0 / tri.w0 + w1 / tri.w1 + w2 / tri.w2;
+
+        float2 uvNum = w0 * tri.uv0 / tri.w0 + w1 * tri.uv1 / tri.w1 + w2 * tri.uv2 / tri.w2;
+
+        float2 uv = uvNum / uvDen;
+
+        pixelZ = z;
+        pixelCol = _MainTex.SampleLevel(sampler_MainTex, uv, 0);
+    }
+
+    depthBuffer[pixel] = pixelZ;
+    colorBuffer[pixel] = pixelCol;
+}
+
+[numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
+void ClearRenderTargets(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+{
+    if (did.x < resolution.x && did.y < resolution.y)
+    {
+        colorBuffer[did] = float4(0, 0, 0, 1);
+        depthBuffer[did] = 1e9;
+    }
+
+    if (tid.x == 0 && tid.y == 0)
+    {
+        uint tileIndex = gid.y * tilesX + gid.x;
+        uint tileCount = tilesX * tilesY;
+
+        if (tileIndex < tileCount)
+            tileWriteOffsets[tileIndex] = 0;
+    }
+}
