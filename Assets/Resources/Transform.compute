@@ -5,18 +5,41 @@ struct Triangle
     float2 v0;
     float2 v1;
     float2 v2;
-    
-    float z0;
-    float z1;
-    float z2;
 
     float2 uv0;
     float2 uv1;
     float2 uv2;
 
+    float2 uvw0;
+    float2 uvw1;
+    float2 uvw2;
+
+    float z0;
+    float z1;
+    float z2;
+    
+    float rw0;
+    float rw1;
+    float rw2;
+    
     float w0;
     float w1;
     float w2;
+
+    float A0;
+    float B0;
+    float C0;
+
+    float A1;
+    float B1;
+    float C1;
+
+    float A2;
+    float B2;
+    float C2;
+
+    float area;
+    float invArea;
 };
 
 float4x4 view;
@@ -339,7 +362,7 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             float4 c0 = processVertices[e];
             float4 c1 = processVertices[e + 1];
             float4 c2 = processVertices[e + 2];
-            
+        
             float2 t0 = processTextures[e];
             float2 t1 = processTextures[e + 1];
             float2 t2 = processTextures[e + 2];
@@ -355,9 +378,18 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             float2 s0 = float2((ndc0.x * 0.5 + 0.5) * resolution.x, (ndc0.y * 0.5 + 0.5) * resolution.y);
             float2 s1 = float2((ndc1.x * 0.5 + 0.5) * resolution.x, (ndc1.y * 0.5 + 0.5) * resolution.y);
             float2 s2 = float2((ndc2.x * 0.5 + 0.5) * resolution.x, (ndc2.y * 0.5 + 0.5) * resolution.y);
+        
+            float2 e1v = s1 - s0;
+            float2 e2v = s2 - s0;
+            float area = e1v.x * e2v.y - e1v.y * e2v.x;
+            
+            if (area >= 0)
+            {
+                continue;
+            }
             
             Triangle tri;
-            
+        
             tri.v0 = s0;
             tri.v1 = s1;
             tri.v2 = s2;
@@ -373,7 +405,30 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             tri.uv0 = t0;
             tri.uv1 = t1;
             tri.uv2 = t2;
+
+            tri.uvw0 = t0 * invw0;
+            tri.uvw1 = t1 * invw1;
+            tri.uvw2 = t2 * invw2;
+
+            tri.rw0 = invw0;
+            tri.rw1 = invw1;
+            tri.rw2 = invw2;
             
+            tri.A0 = (s1.y - s2.y);
+            tri.B0 = -(s1.x - s2.x);
+            tri.C0 = (s1.x * s2.y - s1.y * s2.x);
+
+            tri.A1 = (s2.y - s0.y);
+            tri.B1 = -(s2.x - s0.x);
+            tri.C1 = (s2.x * s0.y - s2.y * s0.x);
+
+            tri.A2 = (s0.y - s1.y);
+            tri.B2 = -(s0.x - s1.x);
+            tri.C2 = (s0.x * s1.y - s0.y * s1.x);
+            
+            tri.area = area;
+            tri.invArea = 1.0 / area;
+        
             uint triId;
             InterlockedAdd(triangleCounter[0], 1, triId);
             trianglesWrite[triId] = tri;

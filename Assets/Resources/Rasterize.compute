@@ -12,18 +12,41 @@ struct Triangle
     float2 v0;
     float2 v1;
     float2 v2;
-    
-    float z0;
-    float z1;
-    float z2;
 
     float2 uv0;
     float2 uv1;
     float2 uv2;
 
+    float2 uvw0;
+    float2 uvw1;
+    float2 uvw2;
+
+    float z0;
+    float z1;
+    float z2;
+    
+    float rw0;
+    float rw1;
+    float rw2;
+    
     float w0;
     float w1;
     float w2;
+
+    float A0;
+    float B0;
+    float C0;
+
+    float A1;
+    float B1;
+    float C1;
+
+    float A2;
+    float B2;
+    float C2;
+
+    float area;
+    float invArea;
 };
 
 uint2 resolution;
@@ -42,13 +65,6 @@ RWTexture2D<float> depthBuffer;
 
 Texture2D<float4> _MainTex;
 SamplerState sampler_MainTex;
-
-float Edges(float2 a, float2 b, float2 p)
-{
-    float2 ab = b - a;
-    float2 ap = p - a;
-    return ab.x * ap.y - ab.y * ap.x;
-}
 
 [numthreads(1, 1, 1)]
 void TriangleBinning(uint id : SV_DispatchThreadID)
@@ -119,7 +135,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     }
 
     float2 p = (float2) pixel + 0.5;
-    
+
     float pixelZ = 1e9;
     
     float4 pixelCol = float4(0, 0, 0, 0);
@@ -128,37 +144,41 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     {
         Triangle tri = trianglesRead[tileTriIndicesRead[start + i]];
 
-        float rw0 = 1.0f / tri.w0;
-        float rw1 = 1.0f / tri.w1;
-        float rw2 = 1.0f / tri.w2;
-        
-        float area = Edges(tri.v0, tri.v1, tri.v2);
-        float w0 = Edges(tri.v1, tri.v2, p);
-        float w1 = Edges(tri.v2, tri.v0, p);
-        float w2 = Edges(tri.v0, tri.v1, p);
-        
-        if (w0 > 1e-6f || w1 > 1e-6f || w2 > 1e-6f)
+        float wp0 = tri.A0 * p.x + tri.B0 * p.y + tri.C0;
+        float wp1 = tri.A1 * p.x + tri.B1 * p.y + tri.C1;
+        float wp2 = tri.A2 * p.x + tri.B2 * p.y + tri.C2;
+
+        if (wp0 > 1e-6f)
         {
             continue;
         }
         
-        float invArea = 1.0f / area;
-        w0 *= invArea;
-        w1 *= invArea;
-        w2 *= invArea;
+        if (wp1 > 1e-6f)
+        {
+            continue;
+        }
         
-        float z = w0 * tri.z0 + w1 * tri.z1 + w2 * tri.z2;
+        if (wp2 > 1e-6f)
+        {
+            continue;
+        }
+
+        float b0 = wp0 * tri.invArea;
+        float b1 = wp1 * tri.invArea;
+        float b2 = wp2 * tri.invArea;
+
+        float z = b0 * tri.z0 + b1 * tri.z1 + b2 * tri.z2;
         
         if (z >= pixelZ)
         {
             continue;
         }
-
-        float uvDen = w0 * rw0 + w1 * rw1 + w2 * rw2;
         
-        float2 uvNum = w0 * tri.uv0 * rw0 + w1 * tri.uv1 * rw1 + w2 * tri.uv2 * rw2;
-
-        float2 uv = uvNum / uvDen;
+        float denom = b0 * tri.rw0 + b1 * tri.rw1 + b2 * tri.rw2;
+        
+        float2 num = b0 * tri.uvw0 + b1 * tri.uvw1 + b2 * tri.uvw2;
+        
+        float2 uv = num / denom;
 
         pixelZ = z;
         pixelCol = _MainTex.SampleLevel(sampler_MainTex, uv, 0);
@@ -183,6 +203,8 @@ void ClearRendering(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         uint tileCount = tilesX * tilesY;
 
         if (tileIndex < tileCount)
+        {
             tileWriteOffsets[tileIndex] = 0;
+        }  
     }
 }

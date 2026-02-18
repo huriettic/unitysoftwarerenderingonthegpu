@@ -9,17 +9,40 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public Vector2 v1;
         public Vector2 v2;
 
-        public float z0;
-        public float z1;
-        public float z2;
-
         public Vector2 uv0;
         public Vector2 uv1;
         public Vector2 uv2;
 
+        public Vector2 uvw0;
+        public Vector2 uvw1;
+        public Vector2 uvw2;
+
+        public float z0;
+        public float z1;
+        public float z2;
+
+        public float rw0;
+        public float rw1;
+        public float rw2;
+
         public float w0;
         public float w1;
         public float w2;
+
+        public float A0;
+        public float B0;
+        public float C0;
+
+        public float A1;
+        public float B1; 
+        public float C1;
+
+        public float A2;
+        public float B2;
+        public float C2;
+
+        public float area;
+        public float invArea;
     };
 
     public ComputeShader transformCS;
