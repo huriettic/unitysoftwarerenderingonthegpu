@@ -105,9 +105,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         return;
     }
     
-    uint2 range = tileIndex * MAX_TRIS;
-    
-    uint start = range.x;
+    uint start = tileIndex * MAX_TRIS;
 
     uint tileX = tileIndex % tilesX;
     
@@ -119,14 +117,10 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     {
         return;
     }
-    
-    float tinyNumber = 1e-6f;
-    
-    float bigNumber = 1e9;
 
     float2 p = (float2) pixel + 0.5;
     
-    float pixelZ = bigNumber;
+    float pixelZ = 1e9;
     
     float4 pixelCol = float4(0, 0, 0, 0);
 
@@ -134,21 +128,24 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     {
         Triangle tri = trianglesRead[tileTriIndicesRead[start + i]];
 
-        float area = Edges(tri.v0, tri.v1, tri.v2);
+        float rw0 = 1.0f / tri.w0;
+        float rw1 = 1.0f / tri.w1;
+        float rw2 = 1.0f / tri.w2;
         
+        float area = Edges(tri.v0, tri.v1, tri.v2);
         float w0 = Edges(tri.v1, tri.v2, p);
         float w1 = Edges(tri.v2, tri.v0, p);
         float w2 = Edges(tri.v0, tri.v1, p);
-
+        
+        if (w0 > 1e-6f || w1 > 1e-6f || w2 > 1e-6f)
+        {
+            continue;
+        }
+        
         float invArea = 1.0f / area;
         w0 *= invArea;
         w1 *= invArea;
         w2 *= invArea;
-
-        if (w0 < -tinyNumber || w1 < -tinyNumber || w2 < -tinyNumber)
-        {
-            continue;
-        }
         
         float z = w0 * tri.z0 + w1 * tri.z1 + w2 * tri.z2;
         
@@ -157,9 +154,9 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
             continue;
         }
 
-        float uvDen = w0 / tri.w0 + w1 / tri.w1 + w2 / tri.w2;
-
-        float2 uvNum = w0 * tri.uv0 / tri.w0 + w1 * tri.uv1 / tri.w1 + w2 * tri.uv2 / tri.w2;
+        float uvDen = w0 * rw0 + w1 * rw1 + w2 * rw2;
+        
+        float2 uvNum = w0 * tri.uv0 * rw0 + w1 * tri.uv1 * rw1 + w2 * tri.uv2 * rw2;
 
         float2 uv = uvNum / uvDen;
 

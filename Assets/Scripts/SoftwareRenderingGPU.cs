@@ -205,11 +205,11 @@ public class SoftwareRenderingGPU : MonoBehaviour
 
     void RenderDispatch()
     {
-        triangleCounterBuffer.SetData(counter);
-
         Matrix4x4 view = cam.worldToCameraMatrix;
         Matrix4x4 proj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, false);
         Matrix4x4 localToWorld = triangles.transform.localToWorldMatrix;
+
+        triangleCounterBuffer.SetData(counter);
 
         transformCS.SetMatrix("view", view);
         transformCS.SetMatrix("proj", proj);
@@ -220,6 +220,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         rasterCS.SetInt("tilesX", tilesX);
         rasterCS.SetInt("tilesY", tilesY);
         rasterCS.SetInts("resolution", resolution);
+
         rasterCS.SetTexture(ClearRenderTargets, "colorBuffer", backColor);
         rasterCS.SetTexture(ClearRenderTargets, "depthBuffer", backDepth);
         rasterCS.SetBuffer(ClearRenderTargets, "tileWriteOffsets", tileWriteOffsetsBuffer);
