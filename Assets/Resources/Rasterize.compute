@@ -1,6 +1,6 @@
 #pragma kernel TriangleBinning
 #pragma kernel RasterizeTiles
-#pragma kernel ClearRenderTargets
+#pragma kernel ClearRendering
 
 #define TILE_WIDTH   8
 #define TILE_HEIGHT  8
@@ -65,10 +65,10 @@ void TriangleBinning(uint id : SV_DispatchThreadID)
     float2 minP = min(tri.v0, min(tri.v1, tri.v2));
     float2 maxP = max(tri.v0, max(tri.v1, tri.v2));
 
-    int minTileX = clamp((int) floor(minP.x / TILE_WIDTH), 0, tilesX - 1);
-    int maxTileX = clamp((int) floor(maxP.x / TILE_WIDTH), 0, tilesX - 1);
-    int minTileY = clamp((int) floor(minP.y / TILE_HEIGHT), 0, tilesY - 1);
-    int maxTileY = clamp((int) floor(maxP.y / TILE_HEIGHT), 0, tilesY - 1);
+    int minTileX = clamp((int) floor(minP.x / TILE_WIDTH), 0, (int) tilesX - 1);
+    int maxTileX = clamp((int) floor(maxP.x / TILE_WIDTH), 0, (int) tilesX - 1);
+    int minTileY = clamp((int) floor(minP.y / TILE_HEIGHT), 0, (int) tilesY - 1);
+    int maxTileY = clamp((int) floor(maxP.y / TILE_HEIGHT), 0, (int) tilesY - 1);
 
     for (int ty = minTileY; ty <= maxTileY; ty++)
     {
@@ -135,11 +135,6 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
 
         float area = Edges(tri.v0, tri.v1, tri.v2);
         
-        if (area >= 0.0)
-        {
-            continue;
-        }
-        
         float w0 = Edges(tri.v1, tri.v2, p);
         float w1 = Edges(tri.v2, tri.v0, p);
         float w2 = Edges(tri.v0, tri.v1, p);
@@ -176,7 +171,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
 }
 
 [numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
-void ClearRenderTargets(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+void ClearRendering(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
     if (did.x < resolution.x && did.y < resolution.y)
     {

@@ -86,7 +86,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         VertexTransform = transformCS.FindKernel("VertexTransform");
         RasterizeTiles = rasterCS.FindKernel("RasterizeTiles");
         TriangleBinning = rasterCS.FindKernel("TriangleBinning");
-        ClearRenderTargets = rasterCS.FindKernel("ClearRenderTargets");
+        ClearRenderTargets = rasterCS.FindKernel("ClearRendering");
 
         counter = new uint[] { 0 };
 
