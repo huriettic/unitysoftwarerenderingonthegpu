@@ -123,12 +123,8 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     
     uint start = tileIndex * MAX_TRIS;
 
-    uint tileX = tileIndex % tilesX;
+    int2 pixel = int2(did.x, did.y);
     
-    uint tileY = tileIndex / tilesX;
-
-    int2 pixel = int2((int) (tileX * TILE_WIDTH + tid.x), (int) (tileY * TILE_HEIGHT + tid.y));
-
     if (pixel.x < 0 || pixel.y < 0 || pixel.x >= (int) resolution.x || pixel.y >= (int) resolution.y)
     {
         return;
