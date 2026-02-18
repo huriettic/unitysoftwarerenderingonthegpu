@@ -122,15 +122,13 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     }
     
     uint start = tileIndex * MAX_TRIS;
-
-    int2 pixel = int2(did.x, did.y);
     
-    if (pixel.x < 0 || pixel.y < 0 || pixel.x >= (int) resolution.x || pixel.y >= (int) resolution.y)
+    if (did.x < 0 || did.y < 0 || did.x >= resolution.x || did.y >= resolution.y)
     {
         return;
     }
 
-    float2 p = (float2) pixel + 0.5;
+    float2 p = did + 0.5;
 
     float pixelZ = 1e9;
     
@@ -180,8 +178,8 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         pixelCol = _MainTex.SampleLevel(sampler_MainTex, uv, 0);
     }
 
-    depthBuffer[pixel] = pixelZ;
-    colorBuffer[pixel] = pixelCol;
+    depthBuffer[did] = pixelZ;
+    colorBuffer[did] = pixelCol;
 }
 
 [numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
