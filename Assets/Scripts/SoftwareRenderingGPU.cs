@@ -42,7 +42,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
     ComputeBuffer indexBuffer;
 
     ComputeBuffer triangleBuffer;
-    ComputeBuffer tileRangesBuffer;
     ComputeBuffer tileWriteOffsetsBuffer;
     ComputeBuffer tileTriIndicesBuffer;
 
@@ -179,27 +178,15 @@ public class SoftwareRenderingGPU : MonoBehaviour
         int tileCount = tilesX * tilesY;
         int maxTris = 512;
 
-        tileRangesBuffer?.Dispose();
         tileWriteOffsetsBuffer?.Dispose();
         tileTriIndicesBuffer?.Dispose();
 
-        tileRangesBuffer = new ComputeBuffer(tileCount, uintStride * 2);
         tileWriteOffsetsBuffer = new ComputeBuffer(tileCount, uintStride);
         tileTriIndicesBuffer = new ComputeBuffer(tileCount * maxTris, uintStride);
 
-        uint[] ranges = new uint[tileCount * 2];
-        for (int t = 0; t < tileCount; t++)
-        {
-            ranges[t * 2] = (uint)(t * maxTris);
-            ranges[t * 2 + 1] = (uint)maxTris;
-        }
-        tileRangesBuffer.SetData(ranges);
-
-        rasterCS.SetBuffer(TriangleBinning, "tileRanges", tileRangesBuffer);
         rasterCS.SetBuffer(TriangleBinning, "tileWriteOffsets", tileWriteOffsetsBuffer);
         rasterCS.SetBuffer(TriangleBinning, "tileTriIndicesWrite", tileTriIndicesBuffer);
 
-        rasterCS.SetBuffer(RasterizeTiles, "tileRanges", tileRangesBuffer);
         rasterCS.SetBuffer(RasterizeTiles, "tileWriteOffsets", tileWriteOffsetsBuffer);
         rasterCS.SetBuffer(RasterizeTiles, "tileTriIndicesRead", tileTriIndicesBuffer);
     }
@@ -275,7 +262,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
         temporaryTexturesBuffer?.Dispose();
         triangleCounterBuffer?.Dispose();
         triangleBuffer?.Dispose();
-        tileRangesBuffer?.Dispose();
         tileWriteOffsetsBuffer?.Dispose();
         tileTriIndicesBuffer?.Dispose();
     }

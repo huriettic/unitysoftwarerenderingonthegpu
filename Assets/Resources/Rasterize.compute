@@ -5,6 +5,8 @@
 #define TILE_WIDTH   8
 #define TILE_HEIGHT  8
 
+#define MAX_TRIS 512
+
 struct Triangle
 {
     float2 v0;
@@ -31,9 +33,7 @@ uint tilesY;
 StructuredBuffer<Triangle> trianglesRead;
 StructuredBuffer<uint> triangleCounter;
 
-StructuredBuffer<uint2> tileRanges;
 RWStructuredBuffer<uint> tileWriteOffsets;
-
 RWStructuredBuffer<uint> tileTriIndicesWrite;
 StructuredBuffer<uint> tileTriIndicesRead;
 
@@ -79,7 +79,8 @@ void TriangleBinning(uint id : SV_DispatchThreadID)
             uint prevCount;
             InterlockedAdd(tileWriteOffsets[tileIndex], 1, prevCount);
 
-            uint baseOffset = tileRanges[tileIndex].x;
+            uint baseOffset = tileIndex * MAX_TRIS;
+            
             tileTriIndicesWrite[baseOffset + prevCount] = id;
         }
     }
@@ -104,7 +105,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         return;
     }
     
-    uint2 range = tileRanges[tileIndex];
+    uint2 range = tileIndex * MAX_TRIS;
     
     uint start = range.x;
 
@@ -154,7 +155,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         if (z >= pixelZ)
         {
             continue;
-        } 
+        }
 
         float uvDen = w0 / tri.w0 + w1 / tri.w1 + w2 / tri.w2;
 
