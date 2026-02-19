@@ -17,13 +17,13 @@ struct Triangle
     float2 uv1;
     float2 uv2;
 
-    float2 uvw0;
-    float2 uvw1;
-    float2 uvw2;
+    float2 rwuv0;
+    float2 rwuv1;
+    float2 rwuv2;
 
-    float z0;
-    float z1;
-    float z2;
+    float rwz0;
+    float rwz1;
+    float rwz2;
     
     float rw0;
     float rw1;
@@ -33,20 +33,20 @@ struct Triangle
     float w1;
     float w2;
 
-    float A0;
-    float B0;
-    float C0;
+    float a0;
+    float b0;
+    float c0;
 
-    float A1;
-    float B1;
-    float C1;
+    float a1;
+    float b1;
+    float c1;
 
-    float A2;
-    float B2;
-    float C2;
+    float a2;
+    float b2;
+    float c2;
 
     float area;
-    float invArea;
+    float rarea;
 };
 
 uint2 resolution;
@@ -54,11 +54,10 @@ uint tilesX;
 uint tilesY;
 
 StructuredBuffer<Triangle> trianglesRead;
-StructuredBuffer<uint> triangleCounter;
+RWStructuredBuffer<uint> triangleCounter;
 
-RWStructuredBuffer<uint> tileWriteOffsets;
-RWStructuredBuffer<uint> tileTriIndicesWrite;
-StructuredBuffer<uint> tileTriIndicesRead;
+RWStructuredBuffer<uint> tileOffsets;
+RWStructuredBuffer<uint> tileTriIndices;
 
 RWTexture2D<float4> colorBuffer;
 RWTexture2D<float> depthBuffer;
@@ -93,11 +92,11 @@ void TriangleBinning(uint id : SV_DispatchThreadID)
             uint tileIndex = ty * tilesX + tx;
 
             uint prevCount;
-            InterlockedAdd(tileWriteOffsets[tileIndex], 1, prevCount);
+            InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
 
             uint baseOffset = tileIndex * MAX_TRIS;
             
-            tileTriIndicesWrite[baseOffset + prevCount] = id;
+            tileTriIndices[baseOffset + prevCount] = id;
         }
     }
 }
@@ -114,7 +113,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         return;
     }
     
-    uint count = tileWriteOffsets[tileIndex];
+    uint count = tileOffsets[tileIndex];
     
     if (count == 0)
     {
@@ -136,11 +135,11 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
 
     for (uint i = 0; i < count; i++)
     {
-        Triangle tri = trianglesRead[tileTriIndicesRead[start + i]];
+        Triangle tri = trianglesRead[tileTriIndices[start + i]];
 
-        float wp0 = tri.A0 * p.x + tri.B0 * p.y + tri.C0;
-        float wp1 = tri.A1 * p.x + tri.B1 * p.y + tri.C1;
-        float wp2 = tri.A2 * p.x + tri.B2 * p.y + tri.C2;
+        float wp0 = tri.a0 * p.x + tri.b0 * p.y + tri.c0;
+        float wp1 = tri.a1 * p.x + tri.b1 * p.y + tri.c1;
+        float wp2 = tri.a2 * p.x + tri.b2 * p.y + tri.c2;
 
         if (wp0 > 1e-6f)
         {
@@ -157,11 +156,11 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
             continue;
         }
 
-        float b0 = wp0 * tri.invArea;
-        float b1 = wp1 * tri.invArea;
-        float b2 = wp2 * tri.invArea;
+        float b0 = wp0 * tri.rarea;
+        float b1 = wp1 * tri.rarea;
+        float b2 = wp2 * tri.rarea;
 
-        float z = b0 * tri.z0 + b1 * tri.z1 + b2 * tri.z2;
+        float z = b0 * tri.rwz0 + b1 * tri.rwz1 + b2 * tri.rwz2;
         
         if (z >= pixelZ)
         {
@@ -170,7 +169,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         
         float denom = b0 * tri.rw0 + b1 * tri.rw1 + b2 * tri.rw2;
         
-        float2 num = b0 * tri.uvw0 + b1 * tri.uvw1 + b2 * tri.uvw2;
+        float2 num = b0 * tri.rwuv0 + b1 * tri.rwuv1 + b2 * tri.rwuv2;
         
         float2 uv = num / denom;
 
@@ -198,7 +197,12 @@ void ClearRendering(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
 
         if (tileIndex < tileCount)
         {
-            tileWriteOffsets[tileIndex] = 0;
+            tileOffsets[tileIndex] = 0;
         }  
+    }
+    
+    if (gid.x == 0 && gid.y == 0 && tid.x == 0 && tid.y == 0)
+    {
+        triangleCounter[0] = 0;
     }
 }

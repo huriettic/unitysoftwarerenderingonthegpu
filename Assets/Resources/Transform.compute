@@ -10,13 +10,13 @@ struct Triangle
     float2 uv1;
     float2 uv2;
 
-    float2 uvw0;
-    float2 uvw1;
-    float2 uvw2;
+    float2 rwuv0;
+    float2 rwuv1;
+    float2 rwuv2;
 
-    float z0;
-    float z1;
-    float z2;
+    float rwz0;
+    float rwz1;
+    float rwz2;
     
     float rw0;
     float rw1;
@@ -26,20 +26,20 @@ struct Triangle
     float w1;
     float w2;
 
-    float A0;
-    float B0;
-    float C0;
+    float a0;
+    float b0;
+    float c0;
 
-    float A1;
-    float B1;
-    float C1;
+    float a1;
+    float b1;
+    float c1;
 
-    float A2;
-    float B2;
-    float C2;
+    float a2;
+    float b2;
+    float c2;
 
     float area;
-    float invArea;
+    float rarea;
 };
 
 float4x4 view;
@@ -89,12 +89,12 @@ void VertexTransform(uint id : SV_DispatchThreadID)
     float4 clip1 = mul(proj, view1);
     float4 clip2 = mul(proj, view2);
     
-    float2 edge1 = clip1.xy * clip0.w - clip0.xy * clip1.w;
-    float2 edge2 = clip2.xy * clip0.w - clip0.xy * clip2.w;
+    float2 ce1 = clip1.xy * clip0.w - clip0.xy * clip1.w;
+    float2 ce2 = clip2.xy * clip0.w - clip0.xy * clip2.w;
 
-    float cross = edge1.x * edge2.y - edge1.y * edge2.x;
+    float clipDir = ce1.x * ce2.y - ce1.y * ce2.x;
     
-    if (cross >= 0)
+    if (clipDir >= 0)
     {
         return;
     }
@@ -359,34 +359,31 @@ void VertexTransform(uint id : SV_DispatchThreadID)
     {
         if (processBool[e] == 0 && processBool[e + 1] == 0 && processBool[e + 2] == 0)
         {
-            float4 c0 = processVertices[e];
-            float4 c1 = processVertices[e + 1];
-            float4 c2 = processVertices[e + 2];
+            float4 v0 = processVertices[e];
+            float4 v1 = processVertices[e + 1];
+            float4 v2 = processVertices[e + 2];
         
             float2 t0 = processTextures[e];
             float2 t1 = processTextures[e + 1];
             float2 t2 = processTextures[e + 2];
 
-            float invw0 = 1.0 / c0.w;
-            float invw1 = 1.0 / c1.w;
-            float invw2 = 1.0 / c2.w;
-
-            float3 ndc0 = c0.xyz * invw0;
-            float3 ndc1 = c1.xyz * invw1;
-            float3 ndc2 = c2.xyz * invw2;
+            float invw0 = 1.0 / v0.w;
+            float invw1 = 1.0 / v1.w;
+            float invw2 = 1.0 / v2.w;
+            
+            float3 ndc0 = v0.xyz * invw0;
+            float3 ndc1 = v1.xyz * invw1;
+            float3 ndc2 = v2.xyz * invw2;
 
             float2 s0 = float2((ndc0.x * 0.5 + 0.5) * resolution.x, (ndc0.y * 0.5 + 0.5) * resolution.y);
             float2 s1 = float2((ndc1.x * 0.5 + 0.5) * resolution.x, (ndc1.y * 0.5 + 0.5) * resolution.y);
             float2 s2 = float2((ndc2.x * 0.5 + 0.5) * resolution.x, (ndc2.y * 0.5 + 0.5) * resolution.y);
         
-            float2 e1v = s1 - s0;
-            float2 e2v = s2 - s0;
-            float area = e1v.x * e2v.y - e1v.y * e2v.x;
+            float2 se1 = s1 - s0;
+            float2 se2 = s2 - s0;
+            float a = se1.x * se2.y - se1.y * se2.x;
             
-            if (area >= 0)
-            {
-                continue;
-            }
+            float inva = 1.0 / a;
             
             Triangle tri;
         
@@ -394,40 +391,40 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             tri.v1 = s1;
             tri.v2 = s2;
 
-            tri.z0 = c0.z * invw0;
-            tri.z1 = c1.z * invw1;
-            tri.z2 = c2.z * invw2;
+            tri.rwz0 = v0.z * invw0;
+            tri.rwz1 = v1.z * invw1;
+            tri.rwz2 = v2.z * invw2;
 
-            tri.w0 = c0.w;
-            tri.w1 = c1.w;
-            tri.w2 = c2.w;
+            tri.w0 = v0.w;
+            tri.w1 = v1.w;
+            tri.w2 = v2.w;
 
             tri.uv0 = t0;
             tri.uv1 = t1;
             tri.uv2 = t2;
 
-            tri.uvw0 = t0 * invw0;
-            tri.uvw1 = t1 * invw1;
-            tri.uvw2 = t2 * invw2;
+            tri.rwuv0 = t0 * invw0;
+            tri.rwuv1 = t1 * invw1;
+            tri.rwuv2 = t2 * invw2;
 
             tri.rw0 = invw0;
             tri.rw1 = invw1;
             tri.rw2 = invw2;
             
-            tri.A0 = (s1.y - s2.y);
-            tri.B0 = -(s1.x - s2.x);
-            tri.C0 = (s1.x * s2.y - s1.y * s2.x);
+            tri.a0 = s1.y - s2.y;
+            tri.b0 = -(s1.x - s2.x);
+            tri.c0 = s1.x * s2.y - s1.y * s2.x;
 
-            tri.A1 = (s2.y - s0.y);
-            tri.B1 = -(s2.x - s0.x);
-            tri.C1 = (s2.x * s0.y - s2.y * s0.x);
+            tri.a1 = s2.y - s0.y;
+            tri.b1 = -(s2.x - s0.x);
+            tri.c1 = s2.x * s0.y - s2.y * s0.x;
 
-            tri.A2 = (s0.y - s1.y);
-            tri.B2 = -(s0.x - s1.x);
-            tri.C2 = (s0.x * s1.y - s0.y * s1.x);
+            tri.a2 = s0.y - s1.y;
+            tri.b2 = -(s0.x - s1.x);
+            tri.c2 = s0.x * s1.y - s0.y * s1.x;
             
-            tri.area = area;
-            tri.invArea = 1.0 / area;
+            tri.area = a;
+            tri.rarea = inva;
         
             uint triId;
             InterlockedAdd(triangleCounter[0], 1, triId);

@@ -13,13 +13,13 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public Vector2 uv1;
         public Vector2 uv2;
 
-        public Vector2 uvw0;
-        public Vector2 uvw1;
-        public Vector2 uvw2;
+        public Vector2 rwuv0;
+        public Vector2 rwuv1;
+        public Vector2 rwuv2;
 
-        public float z0;
-        public float z1;
-        public float z2;
+        public float rwz0;
+        public float rwz1;
+        public float rwz2;
 
         public float rw0;
         public float rw1;
@@ -29,20 +29,20 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public float w1;
         public float w2;
 
-        public float A0;
-        public float B0;
-        public float C0;
+        public float a0;
+        public float b0;
+        public float c0;
 
-        public float A1;
-        public float B1; 
-        public float C1;
+        public float a1;
+        public float b1; 
+        public float c1;
 
-        public float A2;
-        public float B2;
-        public float C2;
+        public float a2;
+        public float b2;
+        public float c2;
 
         public float area;
-        public float invArea;
+        public float rarea;
     };
 
     public ComputeShader transformCS;
@@ -76,13 +76,12 @@ public class SoftwareRenderingGPU : MonoBehaviour
     ComputeBuffer temporaryVerticesBuffer;
     ComputeBuffer temporaryTexturesBuffer;
 
-    uint[] counter;
     int[] resolution;
 
     int VertexTransform;
     int RasterizeTiles;
     int TriangleBinning;
-    int ClearRenderTargets;
+    int ClearRendering;
     int tilesX;
     int tilesY;
     int triangleCount;
@@ -108,9 +107,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         VertexTransform = transformCS.FindKernel("VertexTransform");
         RasterizeTiles = rasterCS.FindKernel("RasterizeTiles");
         TriangleBinning = rasterCS.FindKernel("TriangleBinning");
-        ClearRenderTargets = rasterCS.FindKernel("ClearRendering");
-
-        counter = new uint[] { 0 };
+        ClearRendering = rasterCS.FindKernel("ClearRendering");
 
         SetMeshBuffers();
         SetResolution(Screen.width, Screen.height);
@@ -129,6 +126,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         transformCS.SetBuffer(VertexTransform, "trianglesWrite", triangleBuffer);
         transformCS.SetBuffer(VertexTransform, "triangleCounter", triangleCounterBuffer);
 
+        rasterCS.SetBuffer(ClearRendering, "triangleCounter", triangleCounterBuffer);
         rasterCS.SetBuffer(TriangleBinning, "triangleCounter", triangleCounterBuffer);
         rasterCS.SetBuffer(TriangleBinning, "trianglesRead", triangleBuffer);
         rasterCS.SetBuffer(RasterizeTiles, "trianglesRead", triangleBuffer);
@@ -153,7 +151,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         vertexBuffer = new ComputeBuffer(vertices.Count, vertexStride);
         uvBuffer = new ComputeBuffer(textures.Count, textureStride);
         indexBuffer = new ComputeBuffer(indices.Count, intStride);
-        triangleCounterBuffer = new ComputeBuffer(1, uintStride, ComputeBufferType.Structured);
+        triangleCounterBuffer = new ComputeBuffer(1, uintStride);
         triangleBuffer = new ComputeBuffer(triangleCount * 4, triStride);
         processVerticesBuffer = new ComputeBuffer(triangleCount * 256, vec4Stride);
         processTexturesBuffer = new ComputeBuffer(triangleCount * 256, textureStride);
@@ -164,7 +162,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
         vertexBuffer.SetData(vertices);
         uvBuffer.SetData(textures);
         indexBuffer.SetData(indices);
-        triangleCounterBuffer.SetData(counter);
     }
 
     void SetResolution(int width, int height)
@@ -207,11 +204,13 @@ public class SoftwareRenderingGPU : MonoBehaviour
         tileWriteOffsetsBuffer = new ComputeBuffer(tileCount, uintStride);
         tileTriIndicesBuffer = new ComputeBuffer(tileCount * maxTris, uintStride);
 
-        rasterCS.SetBuffer(TriangleBinning, "tileWriteOffsets", tileWriteOffsetsBuffer);
-        rasterCS.SetBuffer(TriangleBinning, "tileTriIndicesWrite", tileTriIndicesBuffer);
+        rasterCS.SetBuffer(ClearRendering, "tileOffsets", tileWriteOffsetsBuffer);
 
-        rasterCS.SetBuffer(RasterizeTiles, "tileWriteOffsets", tileWriteOffsetsBuffer);
-        rasterCS.SetBuffer(RasterizeTiles, "tileTriIndicesRead", tileTriIndicesBuffer);
+        rasterCS.SetBuffer(TriangleBinning, "tileOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetBuffer(TriangleBinning, "tileTriIndices", tileTriIndicesBuffer);
+
+        rasterCS.SetBuffer(RasterizeTiles, "tileOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetBuffer(RasterizeTiles, "tileTriIndices", tileTriIndicesBuffer);
     }
 
     void Update()
@@ -232,8 +231,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
         Matrix4x4 proj = GL.GetGPUProjectionMatrix(cam.projectionMatrix, false);
         Matrix4x4 localToWorld = triangles.transform.localToWorldMatrix;
 
-        triangleCounterBuffer.SetData(counter);
-
         transformCS.SetMatrix("view", view);
         transformCS.SetMatrix("proj", proj);
         transformCS.SetMatrix("localToWorld", localToWorld);
@@ -244,11 +241,10 @@ public class SoftwareRenderingGPU : MonoBehaviour
         rasterCS.SetInt("tilesY", tilesY);
         rasterCS.SetInts("resolution", resolution);
 
-        rasterCS.SetTexture(ClearRenderTargets, "colorBuffer", backColor);
-        rasterCS.SetTexture(ClearRenderTargets, "depthBuffer", backDepth);
-        rasterCS.SetBuffer(ClearRenderTargets, "tileWriteOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetTexture(ClearRendering, "colorBuffer", backColor);
+        rasterCS.SetTexture(ClearRendering, "depthBuffer", backDepth);
 
-        rasterCS.Dispatch(ClearRenderTargets, tilesX, tilesY, 1);
+        rasterCS.Dispatch(ClearRendering, tilesX, tilesY, 1);
 
         transformCS.Dispatch(VertexTransform, triangleCount, 1, 1);
 
