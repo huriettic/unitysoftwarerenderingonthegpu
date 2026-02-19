@@ -105,6 +105,10 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
             uint base = tileIndex * MAX_TRIS;
             tileTriIndices[base + prevCount] = id;
         }
+        else
+        {
+            continue;
+        }
     }
 }
 
@@ -120,7 +124,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         return;
     }
     
-    uint count = tileOffsets[tileIndex];
+    uint count = min(tileOffsets[tileIndex], (uint) MAX_TRIS);
     
     if (count == 0)
     {
@@ -129,7 +133,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     
     uint start = tileIndex * MAX_TRIS;
     
-    if (did.x < 0 || did.y < 0 || did.x >= resolution.x || did.y >= resolution.y)
+    if (did.x >= resolution.x || did.y >= resolution.y)
     {
         return;
     }
@@ -148,17 +152,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         float wp1 = tri.a1 * p.x + tri.b1 * p.y + tri.c1;
         float wp2 = tri.a2 * p.x + tri.b2 * p.y + tri.c2;
 
-        if (wp0 > 1e-6f)
-        {
-            continue;
-        }
-        
-        if (wp1 > 1e-6f)
-        {
-            continue;
-        }
-        
-        if (wp2 > 1e-6f)
+        if (wp0 > 1e-6f || wp1 > 1e-6f || wp2 > 1e-6f)
         {
             continue;
         }

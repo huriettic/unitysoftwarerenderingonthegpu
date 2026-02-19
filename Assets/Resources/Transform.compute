@@ -374,14 +374,23 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             float3 ndc0 = v0.xyz * invw0;
             float3 ndc1 = v1.xyz * invw1;
             float3 ndc2 = v2.xyz * invw2;
-
-            float2 s0 = float2((ndc0.x * 0.5 + 0.5) * resolution.x, (ndc0.y * 0.5 + 0.5) * resolution.y);
-            float2 s1 = float2((ndc1.x * 0.5 + 0.5) * resolution.x, (ndc1.y * 0.5 + 0.5) * resolution.y);
-            float2 s2 = float2((ndc2.x * 0.5 + 0.5) * resolution.x, (ndc2.y * 0.5 + 0.5) * resolution.y);
-        
+            
+            float2 s0 = ((ndc0.xy * 0.5 + 0.5) * resolution);
+            float2 s1 = ((ndc1.xy * 0.5 + 0.5) * resolution);
+            float2 s2 = ((ndc2.xy * 0.5 + 0.5) * resolution);
+            
+            s1 = floor(s1) + 0.5;
+            s0 = floor(s0) + 0.5;
+            s2 = floor(s2) + 0.5;
+            
             float2 se1 = s1 - s0;
             float2 se2 = s2 - s0;
             float a = se1.x * se2.y - se1.y * se2.x;
+            
+            if (abs(a) < 1e-8f)
+            {
+                continue;
+            }
             
             float inva = 1.0 / a;
             
