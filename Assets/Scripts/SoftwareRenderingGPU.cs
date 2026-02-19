@@ -65,7 +65,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
     ComputeBuffer indexBuffer;
 
     ComputeBuffer triangleBuffer;
-    ComputeBuffer tileWriteOffsetsBuffer;
+    ComputeBuffer tileOffsetsBuffer;
     ComputeBuffer tileTriIndicesBuffer;
 
     ComputeBuffer triangleCounterBuffer;
@@ -198,18 +198,18 @@ public class SoftwareRenderingGPU : MonoBehaviour
         int tileCount = tilesX * tilesY;
         int maxTris = 512;
 
-        tileWriteOffsetsBuffer?.Dispose();
+        tileOffsetsBuffer?.Dispose();
         tileTriIndicesBuffer?.Dispose();
 
-        tileWriteOffsetsBuffer = new ComputeBuffer(tileCount, uintStride);
+        tileOffsetsBuffer = new ComputeBuffer(tileCount, uintStride);
         tileTriIndicesBuffer = new ComputeBuffer(tileCount * maxTris, uintStride);
 
-        rasterCS.SetBuffer(ClearRendering, "tileOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetBuffer(ClearRendering, "tileOffsets", tileOffsetsBuffer);
 
-        rasterCS.SetBuffer(TriangleBinning, "tileOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetBuffer(TriangleBinning, "tileOffsets", tileOffsetsBuffer);
         rasterCS.SetBuffer(TriangleBinning, "tileTriIndices", tileTriIndicesBuffer);
 
-        rasterCS.SetBuffer(RasterizeTiles, "tileOffsets", tileWriteOffsetsBuffer);
+        rasterCS.SetBuffer(RasterizeTiles, "tileOffsets", tileOffsetsBuffer);
         rasterCS.SetBuffer(RasterizeTiles, "tileTriIndices", tileTriIndicesBuffer);
     }
 
@@ -248,7 +248,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
 
         transformCS.Dispatch(VertexTransform, triangleCount, 1, 1);
 
-        rasterCS.Dispatch(TriangleBinning, triangleCount * 4, 1, 1);
+        rasterCS.Dispatch(TriangleBinning, tilesX, tilesY, 1);
 
         rasterCS.SetTexture(RasterizeTiles, "colorBuffer", backColor);
         rasterCS.SetTexture(RasterizeTiles, "depthBuffer", backDepth);
@@ -282,7 +282,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         temporaryTexturesBuffer?.Dispose();
         triangleCounterBuffer?.Dispose();
         triangleBuffer?.Dispose();
-        tileWriteOffsetsBuffer?.Dispose();
+        tileOffsetsBuffer?.Dispose();
         tileTriIndicesBuffer?.Dispose();
     }
 }

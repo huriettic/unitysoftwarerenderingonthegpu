@@ -65,38 +65,45 @@ RWTexture2D<float> depthBuffer;
 Texture2D<float4> _MainTex;
 SamplerState sampler_MainTex;
 
-[numthreads(1, 1, 1)]
-void TriangleBinning(uint id : SV_DispatchThreadID)
+[numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
+void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
-    uint triCount = triangleCounter[0];
+    uint tileIndex = gid.y * tilesX + gid.x;
     
-    if (id >= triCount)
+    uint tileCount = tilesX * tilesY;
+    
+    if (tileIndex >= tileCount)
     {
         return;
     }
-    
-    Triangle tri = trianglesRead[id];
 
-    float2 minP = min(tri.v0, min(tri.v1, tri.v2));
-    float2 maxP = max(tri.v0, max(tri.v1, tri.v2));
+    float2 tileMin = float2(gid.x * TILE_WIDTH, gid.y * TILE_HEIGHT);
+    float2 tileMax = tileMin + float2(TILE_WIDTH, TILE_HEIGHT);
 
-    int minTileX = clamp((int) floor(minP.x / TILE_WIDTH), 0, (int) tilesX - 1);
-    int maxTileX = clamp((int) floor(maxP.x / TILE_WIDTH), 0, (int) tilesX - 1);
-    int minTileY = clamp((int) floor(minP.y / TILE_HEIGHT), 0, (int) tilesY - 1);
-    int maxTileY = clamp((int) floor(maxP.y / TILE_HEIGHT), 0, (int) tilesY - 1);
+    uint triCount = triangleCounter[0];
 
-    for (int ty = minTileY; ty <= maxTileY; ty++)
+    uint threadIndex = tid.y * TILE_WIDTH + tid.x;
+    uint threadCount = TILE_WIDTH * TILE_HEIGHT;
+
+    for (uint id = threadIndex; id < triCount; id += threadCount)
     {
-        for (int tx = minTileX; tx <= maxTileX; tx++)
+        Triangle tri = trianglesRead[id];
+
+        float2 triMin = min(tri.v0, min(tri.v1, tri.v2));
+        float2 triMax = max(tri.v0, max(tri.v1, tri.v2));
+
+        if (triMax.x < tileMin.x || triMin.x >= tileMax.x || triMax.y < tileMin.y || triMin.y >= tileMax.y)
         {
-            uint tileIndex = ty * tilesX + tx;
+            continue;
+        }
 
-            uint prevCount;
-            InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
+        uint prevCount;
+        InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
 
-            uint baseOffset = tileIndex * MAX_TRIS;
-            
-            tileTriIndices[baseOffset + prevCount] = id;
+        if (prevCount < MAX_TRIS)
+        {
+            uint base = tileIndex * MAX_TRIS;
+            tileTriIndices[base + prevCount] = id;
         }
     }
 }
