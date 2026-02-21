@@ -28,10 +28,6 @@ struct Triangle
     float rw0;
     float rw1;
     float rw2;
-    
-    float w0;
-    float w1;
-    float w2;
 
     float a0;
     float b0;
@@ -47,17 +43,6 @@ struct Triangle
 
     float area;
     float rarea;
-};
-
-struct clipVertex2D
-{
-    float2 v;
-    float2 uv;
-    float2 rwuv;
-    float rwz;
-    float rw;
-    float w;
-    int b;
 };
 
 uint2 resolution;
@@ -96,6 +81,8 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
     uint threadIndex = tid.y * TILE_WIDTH + tid.x;
     uint threadCount = TILE_WIDTH * TILE_HEIGHT;
 
+    uint base = tileIndex * MAX_TRIS;
+    
     for (uint id = threadIndex; id < triCount; id += threadCount)
     {
         Triangle tri = trianglesRead[id];
@@ -113,7 +100,6 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
 
         if (prevCount < MAX_TRIS)
         {
-            uint base = tileIndex * MAX_TRIS;
             tileTriIndices[base + prevCount] = id;
         }
         else

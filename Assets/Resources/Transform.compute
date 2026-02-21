@@ -1,5 +1,7 @@
 #pragma kernel VertexTransform
 
+#define MAX_TRIS 512
+
 struct Triangle
 {
     float2 v0;
@@ -21,10 +23,6 @@ struct Triangle
     float rw0;
     float rw1;
     float rw2;
-    
-    float w0;
-    float w1;
-    float w2;
 
     float a0;
     float b0;
@@ -403,10 +401,6 @@ void VertexTransform(uint id : SV_DispatchThreadID)
             tri.rwz1 = v1.z * invw1;
             tri.rwz2 = v2.z * invw2;
 
-            tri.w0 = v0.w;
-            tri.w1 = v1.w;
-            tri.w2 = v2.w;
-
             tri.uv0 = t0;
             tri.uv1 = t1;
             tri.uv2 = t2;
@@ -436,7 +430,15 @@ void VertexTransform(uint id : SV_DispatchThreadID)
         
             uint triId;
             InterlockedAdd(triangleCounter[0], 1, triId);
-            trianglesWrite[triId] = tri;
+            
+            if (triId < MAX_TRIS)
+            {
+                trianglesWrite[triId] = tri;
+            }
+            else
+            {
+                continue;
+            }
         }
     }
 }

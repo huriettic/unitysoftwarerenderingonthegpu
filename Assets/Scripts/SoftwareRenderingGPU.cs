@@ -25,10 +25,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public float rw1;
         public float rw2;
 
-        public float w0;
-        public float w1;
-        public float w2;
-
         public float a0;
         public float b0;
         public float c0;
