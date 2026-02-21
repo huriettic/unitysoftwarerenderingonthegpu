@@ -42,17 +42,21 @@ struct Triangle
     float rarea;
 };
 
+struct clipVertex
+{
+    float4 v;
+    float2 uv;
+    int b;
+};
+
 float4x4 view;
 float4x4 proj;
 float4x4 localToWorld;
 int2 resolution;
 int triangleCount;
 
-RWStructuredBuffer<float4> processVertices;
-RWStructuredBuffer<float2> processTextures;
-RWStructuredBuffer<int> processBool;
-RWStructuredBuffer<float4> temporaryVertices;
-RWStructuredBuffer<float2> temporaryTextures;
+RWStructuredBuffer<clipVertex> process;
+RWStructuredBuffer<clipVertex> temporary;
 
 StructuredBuffer<float3> vertices;
 StructuredBuffer<float2> uvs;
@@ -99,45 +103,40 @@ void VertexTransform(uint id : SV_DispatchThreadID)
         return;
     }
 
-    int processverticescount = 0;
-    int processtexturescount = 0;
-    int processboolcount = 0;
-
-    processVertices[baseIndex + processverticescount] = clip0;
-    processVertices[baseIndex + processverticescount + 1] = clip1;
-    processVertices[baseIndex + processverticescount + 2] = clip2;
-    processverticescount += 3;
-    processTextures[baseIndex + processtexturescount] = uvs[i0];
-    processTextures[baseIndex + processtexturescount + 1] = uvs[i1];
-    processTextures[baseIndex + processtexturescount + 2] = uvs[i2];
-    processtexturescount += 3;
-    processBool[baseIndex + processboolcount] = 0;
-    processBool[baseIndex + processboolcount + 1] = 0;
-    processBool[baseIndex + processboolcount + 2] = 0;
-    processboolcount += 3;
+    int processcount = 0;
+    
+    process[baseIndex + processcount].v = clip0;
+    process[baseIndex + processcount + 1].v = clip1;
+    process[baseIndex + processcount + 2].v = clip2;
+    process[baseIndex + processcount].uv = uvs[i0];
+    process[baseIndex + processcount + 1].uv = uvs[i1];
+    process[baseIndex + processcount + 2].uv = uvs[i2];
+    process[baseIndex + processcount].b = 0;
+    process[baseIndex + processcount + 1].b = 0;
+    process[baseIndex + processcount + 2].b = 0;
+    processcount += 3;
 
     for (int b = 0; b < 6; b++)
     {
         int addTriangles = 0;
 
-        int temporaryverticescount = 0;
-        int temporarytexturescount = 0;
+        int temporarycount = 0;
 
-        for (uint c = baseIndex; c < baseIndex + processverticescount; c += 3)
+        for (uint c = baseIndex; c < baseIndex + processcount; c += 3)
         {
-            if (processBool[c] == 1 && processBool[c + 1] == 1 && processBool[c + 2] == 1)
+            if (process[c].b == 1 && process[c + 1].b == 1 && process[c + 2].b == 1)
             {
                 continue;
             }
 
-            float4 v0 = processVertices[c];
-            float4 v1 = processVertices[c + 1];
-            float4 v2 = processVertices[c + 2];
+            float4 v0 = process[c].v;
+            float4 v1 = process[c + 1].v;
+            float4 v2 = process[c + 2].v;
 
-            float2 uv0 = processTextures[c];
-            float2 uv1 = processTextures[c + 1];
-            float2 uv2 = processTextures[c + 2];
-
+            float2 uv0 = process[c].uv;
+            float2 uv1 = process[c + 1].uv;
+            float2 uv2 = process[c + 2].uv;
+            
             float d0, d1, d2;
 
             switch (b)
@@ -239,18 +238,21 @@ void VertexTransform(uint id : SV_DispatchThreadID)
                 float t1 = inD / (inD - outD1);
                 float t2 = inD / (inD - outD2);
 
-                temporaryVertices[baseIndex + temporaryverticescount] = inV;
-                temporaryVertices[baseIndex + temporaryverticescount + 1] = lerp(inV, outV1, t1);
-                temporaryVertices[baseIndex + temporaryverticescount + 2] = lerp(inV, outV2, t2);
-                temporaryverticescount += 3;
-                temporaryTextures[baseIndex + temporarytexturescount] = inUV;
-                temporaryTextures[baseIndex + temporarytexturescount + 1] = lerp(inUV, outUV1, t1);
-                temporaryTextures[baseIndex + temporarytexturescount + 2] = lerp(inUV, outUV2, t2);
-                temporarytexturescount += 3;
-                processBool[c] = 1;
-                processBool[c + 1] = 1;
-                processBool[c + 2] = 1;
-
+                temporary[baseIndex + temporarycount].v = inV;
+                temporary[baseIndex + temporarycount + 1].v = lerp(inV, outV1, t1);
+                temporary[baseIndex + temporarycount + 2].v = lerp(inV, outV2, t2);
+                temporary[baseIndex + temporarycount].uv = inUV;
+                temporary[baseIndex + temporarycount + 1].uv = lerp(inUV, outUV1, t1);
+                temporary[baseIndex + temporarycount + 2].uv = lerp(inUV, outUV2, t2);
+                temporary[baseIndex + temporarycount].b = 0;
+                temporary[baseIndex + temporarycount + 1].b = 0;
+                temporary[baseIndex + temporarycount + 2].b = 0;
+                temporarycount += 3;
+                
+                process[c].b = 1;
+                process[c + 1].b = 1;
+                process[c + 2].b = 1;
+                
                 addTriangles += 1;
             }
             else if ((!b0 && b1 && b2) || (b0 && !b1 && b2) || (b0 && b1 && !b2))
@@ -305,67 +307,64 @@ void VertexTransform(uint id : SV_DispatchThreadID)
                 float2 uvA = lerp(inUV1, outUV, t1);
                 float2 uvB = lerp(inUV2, outUV, t2);
 
-                temporaryVertices[baseIndex + temporaryverticescount] = inV1;
-                temporaryVertices[baseIndex + temporaryverticescount + 1] = inV2;
-                temporaryVertices[baseIndex + temporaryverticescount + 2] = vA;
-                temporaryverticescount += 3;
-                temporaryTextures[baseIndex + temporarytexturescount] = inUV1;
-                temporaryTextures[baseIndex + temporarytexturescount + 1] = inUV2;
-                temporaryTextures[baseIndex + temporarytexturescount + 2] = uvA;
-                temporarytexturescount += 3;
-                temporaryVertices[baseIndex + temporaryverticescount] = vA;
-                temporaryVertices[baseIndex + temporaryverticescount + 1] = inV2;
-                temporaryVertices[baseIndex + temporaryverticescount + 2] = vB;
-                temporaryverticescount += 3;
-                temporaryTextures[baseIndex + temporarytexturescount] = uvA;
-                temporaryTextures[baseIndex + temporarytexturescount + 1] = inUV2;
-                temporaryTextures[baseIndex + temporarytexturescount + 2] = uvB;
-                temporarytexturescount += 3;
-                processBool[c] = 1;
-                processBool[c + 1] = 1;
-                processBool[c + 2] = 1;
+                temporary[baseIndex + temporarycount].v = inV1;
+                temporary[baseIndex + temporarycount + 1].v = inV2;
+                temporary[baseIndex + temporarycount + 2].v = vA;
+                temporary[baseIndex + temporarycount].uv = inUV1;
+                temporary[baseIndex + temporarycount + 1].uv = inUV2;
+                temporary[baseIndex + temporarycount + 2].uv = uvA;
+                temporary[baseIndex + temporarycount].b = 0;
+                temporary[baseIndex + temporarycount + 1].b = 0;
+                temporary[baseIndex + temporarycount + 2].b = 0;
+                temporarycount += 3;
+                temporary[baseIndex + temporarycount].v = vA;
+                temporary[baseIndex + temporarycount + 1].v = inV2;
+                temporary[baseIndex + temporarycount + 2].v = vB;
+                temporary[baseIndex + temporarycount].uv = uvA;
+                temporary[baseIndex + temporarycount + 1].uv = inUV2;
+                temporary[baseIndex + temporarycount + 2].uv = uvB;
+                temporary[baseIndex + temporarycount].b = 0;
+                temporary[baseIndex + temporarycount + 1].b = 0;
+                temporary[baseIndex + temporarycount + 2].b = 0;
+                temporarycount += 3;
+                
+                process[c].b = 1;
+                process[c + 1].b = 1;
+                process[c + 2].b = 1;
 
                 addTriangles += 2;
             }
             else
             {
-                processBool[c] = 1;
-                processBool[c + 1] = 1;
-                processBool[c + 2] = 1;
+                process[c].b = 1;
+                process[c + 1].b = 1;
+                process[c + 2].b = 1;
             }
         }
 
         if (addTriangles > 0)
         {
-            for (uint d = baseIndex; d < baseIndex + temporaryverticescount; d += 3)
+            for (uint d = baseIndex; d < baseIndex + temporarycount; d += 3)
             {
-                processVertices[baseIndex + processverticescount] = temporaryVertices[d];
-                processVertices[baseIndex + processverticescount + 1] = temporaryVertices[d + 1];
-                processVertices[baseIndex + processverticescount + 2] = temporaryVertices[d + 2];
-                processverticescount += 3;
-                processTextures[baseIndex + processtexturescount] = temporaryTextures[d];
-                processTextures[baseIndex + processtexturescount + 1] = temporaryTextures[d + 1];
-                processTextures[baseIndex + processtexturescount + 2] = temporaryTextures[d + 2];
-                processtexturescount += 3;
-                processBool[baseIndex + processboolcount] = 0;
-                processBool[baseIndex + processboolcount + 1] = 0;
-                processBool[baseIndex + processboolcount + 2] = 0;
-                processboolcount += 3;
+                process[baseIndex + processcount] = temporary[d];
+                process[baseIndex + processcount + 1] = temporary[d + 1];
+                process[baseIndex + processcount + 2] = temporary[d + 2];
+                processcount += 3;
             }
         }
     }
 
-    for (uint e = baseIndex; e < baseIndex + processverticescount; e += 3)
+    for (uint e = baseIndex; e < baseIndex + processcount; e += 3)
     {
-        if (processBool[e] == 0 && processBool[e + 1] == 0 && processBool[e + 2] == 0)
+        if (process[e].b == 0 && process[e + 1].b == 0 && process[e + 2].b == 0)
         {
-            float4 v0 = processVertices[e];
-            float4 v1 = processVertices[e + 1];
-            float4 v2 = processVertices[e + 2];
+            float4 v0 = process[e].v;
+            float4 v1 = process[e + 1].v;
+            float4 v2 = process[e + 2].v;
         
-            float2 t0 = processTextures[e];
-            float2 t1 = processTextures[e + 1];
-            float2 t2 = processTextures[e + 2];
+            float2 t0 = process[e].uv;
+            float2 t1 = process[e + 1].uv;
+            float2 t2 = process[e + 2].uv;
 
             float invw0 = 1.0 / v0.w;
             float invw1 = 1.0 / v1.w;

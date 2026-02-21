@@ -45,6 +45,13 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public float rarea;
     };
 
+    public struct clipVertex
+    {
+        public Vector4 v;
+        public Vector2 uv;
+        public int b;
+    };
+
     public ComputeShader transformCS;
     public ComputeShader rasterCS;
     public GameObject triangles;
@@ -70,11 +77,8 @@ public class SoftwareRenderingGPU : MonoBehaviour
 
     ComputeBuffer triangleCounterBuffer;
 
-    ComputeBuffer processVerticesBuffer;
-    ComputeBuffer processTexturesBuffer;
-    ComputeBuffer processBoolBuffer;
-    ComputeBuffer temporaryVerticesBuffer;
-    ComputeBuffer temporaryTexturesBuffer;
+    ComputeBuffer processBuffer;
+    ComputeBuffer temporaryBuffer;
 
     int[] resolution;
 
@@ -87,7 +91,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
     int triangleCount;
     int indexCount;
 
-    int vec4Stride;
+    int clipStride;
     int vertexStride;
     int textureStride;
     int intStride;
@@ -117,11 +121,8 @@ public class SoftwareRenderingGPU : MonoBehaviour
         transformCS.SetBuffer(VertexTransform, "uvs", uvBuffer);
         transformCS.SetBuffer(VertexTransform, "indices", indexBuffer);
 
-        transformCS.SetBuffer(VertexTransform, "processVertices", processVerticesBuffer);
-        transformCS.SetBuffer(VertexTransform, "processTextures", processTexturesBuffer);
-        transformCS.SetBuffer(VertexTransform, "processBool", processBoolBuffer);
-        transformCS.SetBuffer(VertexTransform, "temporaryVertices", temporaryVerticesBuffer);
-        transformCS.SetBuffer(VertexTransform, "temporaryTextures", temporaryTexturesBuffer);
+        transformCS.SetBuffer(VertexTransform, "process", processBuffer);
+        transformCS.SetBuffer(VertexTransform, "temporary", temporaryBuffer);
 
         transformCS.SetBuffer(VertexTransform, "trianglesWrite", triangleBuffer);
         transformCS.SetBuffer(VertexTransform, "triangleCounter", triangleCounterBuffer);
@@ -141,7 +142,7 @@ public class SoftwareRenderingGPU : MonoBehaviour
         indexCount = indices.Count;
         triangleCount = indexCount / 3;
 
-        vec4Stride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector4));
+        clipStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(clipVertex));
         vertexStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector3));
         textureStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(Vector2));
         intStride = System.Runtime.InteropServices.Marshal.SizeOf(typeof(int));
@@ -153,11 +154,8 @@ public class SoftwareRenderingGPU : MonoBehaviour
         indexBuffer = new ComputeBuffer(indices.Count, intStride);
         triangleCounterBuffer = new ComputeBuffer(1, uintStride);
         triangleBuffer = new ComputeBuffer(triangleCount * 4, triStride);
-        processVerticesBuffer = new ComputeBuffer(triangleCount * 256, vec4Stride);
-        processTexturesBuffer = new ComputeBuffer(triangleCount * 256, textureStride);
-        processBoolBuffer = new ComputeBuffer(triangleCount * 256, intStride);
-        temporaryVerticesBuffer = new ComputeBuffer(triangleCount * 256, vec4Stride);
-        temporaryTexturesBuffer = new ComputeBuffer(triangleCount * 256, textureStride);
+        processBuffer = new ComputeBuffer(triangleCount * 256, clipStride);
+        temporaryBuffer = new ComputeBuffer(triangleCount * 256, clipStride);
 
         vertexBuffer.SetData(vertices);
         uvBuffer.SetData(textures);
@@ -275,11 +273,8 @@ public class SoftwareRenderingGPU : MonoBehaviour
         vertexBuffer?.Dispose();
         uvBuffer?.Dispose();
         indexBuffer?.Dispose();
-        processVerticesBuffer?.Dispose();
-        processTexturesBuffer?.Dispose();
-        processBoolBuffer?.Dispose();
-        temporaryVerticesBuffer?.Dispose();
-        temporaryTexturesBuffer?.Dispose();
+        processBuffer?.Dispose();
+        temporaryBuffer?.Dispose();
         triangleCounterBuffer?.Dispose();
         triangleBuffer?.Dispose();
         tileOffsetsBuffer?.Dispose();

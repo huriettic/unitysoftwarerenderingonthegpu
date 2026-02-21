@@ -49,6 +49,17 @@ struct Triangle
     float rarea;
 };
 
+struct clipVertex2D
+{
+    float2 v;
+    float2 uv;
+    float2 rwuv;
+    float rwz;
+    float rw;
+    float w;
+    int b;
+};
+
 uint2 resolution;
 uint tilesX;
 uint tilesY;
