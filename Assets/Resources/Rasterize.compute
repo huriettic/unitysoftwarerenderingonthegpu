@@ -7,7 +7,7 @@
 
 #define MAX_TRIS 512
 
-struct Triangle
+struct TriangleScreen
 {
     float2 v0;
     float2 v1;
@@ -49,8 +49,9 @@ uint2 resolution;
 uint tilesX;
 uint tilesY;
 
-StructuredBuffer<Triangle> trianglesRead;
-RWStructuredBuffer<uint> triangleCounter;
+StructuredBuffer<TriangleScreen> trianglesScreenRead;
+RWStructuredBuffer<uint> triangleScreenCounter;
+RWStructuredBuffer<uint> triangleNDCCounter;
 
 RWStructuredBuffer<uint> tileOffsets;
 RWStructuredBuffer<uint> tileTriIndices;
@@ -76,7 +77,7 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
     float2 tileMin = float2(gid.x * TILE_WIDTH, gid.y * TILE_HEIGHT);
     float2 tileMax = tileMin + float2(TILE_WIDTH, TILE_HEIGHT);
 
-    uint triCount = triangleCounter[0];
+    uint triCount = triangleScreenCounter[0];
 
     uint threadIndex = tid.y * TILE_WIDTH + tid.x;
     uint threadCount = TILE_WIDTH * TILE_HEIGHT;
@@ -85,7 +86,7 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
     
     for (uint id = threadIndex; id < triCount; id += threadCount)
     {
-        Triangle tri = trianglesRead[id];
+        TriangleScreen tri = trianglesScreenRead[id];
 
         float2 triMin = min(tri.v0, min(tri.v1, tri.v2));
         float2 triMax = max(tri.v0, max(tri.v1, tri.v2));
@@ -143,7 +144,7 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
 
     for (uint i = 0; i < count; i++)
     {
-        Triangle tri = trianglesRead[tileTriIndices[start + i]];
+        TriangleScreen tri = trianglesScreenRead[tileTriIndices[start + i]];
 
         float wp0 = tri.a0 * p.x + tri.b0 * p.y + tri.c0;
         float wp1 = tri.a1 * p.x + tri.b1 * p.y + tri.c1;
@@ -201,6 +202,7 @@ void ClearRendering(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     
     if (gid.x == 0 && gid.y == 0 && tid.x == 0 && tid.y == 0)
     {
-        triangleCounter[0] = 0;
+        triangleScreenCounter[0] = 0;
+        triangleNDCCounter[0] = 0;
     }
 }
