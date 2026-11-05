@@ -21,10 +21,6 @@ struct TriangleScreen
     float2 v1;
     float2 v2;
 
-    float2 uv0;
-    float2 uv1;
-    float2 uv2;
-
     float2 rwuv0;
     float2 rwuv1;
     float2 rwuv2;
@@ -49,7 +45,6 @@ struct TriangleScreen
     float b2;
     float c2;
 
-    float area;
     float rarea;
 };
 
@@ -82,7 +77,7 @@ RWStructuredBuffer<uint> triangleScreenCounter;
 Texture2D<float4> _MainTex;
 SamplerState sampler_MainTex;
 
-[numthreads(1, 1, 1)]
+[numthreads(64, 1, 1)]
 void LocalTransform(uint id : SV_DispatchThreadID)
 {
     if (id >= (uint) triangleCount)
@@ -421,10 +416,6 @@ void LocalTransform(uint id : SV_DispatchThreadID)
             outTri.v1 = s1;
             outTri.v2 = s2;
 
-            outTri.uv0 = t0;
-            outTri.uv1 = t1;
-            outTri.uv2 = t2;
-
             outTri.rwuv0 = rwuv0;
             outTri.rwuv1 = rwuv1;
             outTri.rwuv2 = rwuv2;
@@ -449,7 +440,6 @@ void LocalTransform(uint id : SV_DispatchThreadID)
             outTri.b2 = -(s0.x - s1.x);
             outTri.c2 = s0.x * s1.y - s0.y * s1.x;
 
-            outTri.area = a;
             outTri.rarea = inva;
                     
             uint triId;
@@ -467,50 +457,41 @@ void LocalTransform(uint id : SV_DispatchThreadID)
     }
 }
 
-[numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
-void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
+[numthreads(64, 1, 1)]
+void TriangleBinning(uint3 did : SV_DispatchThreadID)
 {
-    uint tileIndex = gid.y * tilesX + gid.x;
-    
-    uint tileCount = tilesX * tilesY;
-    
-    if (tileIndex >= tileCount)
+    uint triCount = triangleScreenCounter[0];
+    uint id = did.x;
+
+    if (id >= triCount)
     {
         return;
     }
 
-    float2 tileMin = float2(gid.x * TILE_WIDTH, gid.y * TILE_HEIGHT);
-    float2 tileMax = tileMin + float2(TILE_WIDTH, TILE_HEIGHT);
+    TriangleScreen tri = trianglesScreen[id];
 
-    uint triCount = triangleScreenCounter[0];
+    float2 triMin = min(tri.v0, min(tri.v1, tri.v2));
+    float2 triMax = max(tri.v0, max(tri.v1, tri.v2));
 
-    uint threadIndex = tid.y * TILE_WIDTH + tid.x;
-    uint threadCount = TILE_WIDTH * TILE_HEIGHT;
+    int minTileX = max(0, (int) (triMin.x / TILE_WIDTH));
+    int minTileY = max(0, (int) (triMin.y / TILE_HEIGHT));
+    int maxTileX = min((int) tilesX - 1, (int) (triMax.x / TILE_WIDTH));
+    int maxTileY = min((int) tilesY - 1, (int) (triMax.y / TILE_HEIGHT));
 
-    uint base = tileIndex * MAX_TRIS;
-    
-    for (uint id = threadIndex; id < triCount; id += threadCount)
+    for (int y = minTileY; y <= maxTileY; ++y)
     {
-        TriangleScreen tri = trianglesScreen[id];
-
-        float2 triMin = min(tri.v0, min(tri.v1, tri.v2));
-        float2 triMax = max(tri.v0, max(tri.v1, tri.v2));
-
-        if (triMax.x < tileMin.x || triMin.x >= tileMax.x || triMax.y < tileMin.y || triMin.y >= tileMax.y)
+        for (int x = minTileX; x <= maxTileX; ++x)
         {
-            continue;
-        }
+            uint tileIndex = y * tilesX + x;
+            uint base = tileIndex * MAX_TRIS;
 
-        uint prevCount;
-        InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
+            uint prevCount;
+            InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
 
-        if (prevCount < MAX_TRIS)
-        {
-            tileTriIndices[base + prevCount] = id;
-        }
-        else
-        {
-            continue;
+            if (prevCount < MAX_TRIS)
+            {
+                tileTriIndices[base + prevCount] = id;
+            }
         }
     }
 }
@@ -519,7 +500,6 @@ void TriangleBinning(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2
 void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 did : SV_DispatchThreadID)
 {
     uint tileIndex = gid.y * tilesX + gid.x;
-    
     uint tileCount = tilesX * tilesY;
     
     if (tileIndex >= tileCount)
@@ -528,7 +508,6 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     }
     
     uint count = min(tileOffsets[tileIndex], (uint) MAX_TRIS);
-    
     if (count == 0)
     {
         return;
@@ -536,21 +515,16 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
     
     uint start = tileIndex * MAX_TRIS;
     
-    if (did.x >= resolution.x || did.y >= resolution.y)
-    {
-        return;
-    }
+    bool isValidPixel = (did.x < resolution.x && did.y < resolution.y);
 
     float2 p = did + 0.5;
-
     float pixelZ = 1e9;
-    
     float4 pixelCol = float4(0, 0, 0, 0);
 
     for (uint i = 0; i < count; i++)
     {
         TriangleScreen tri = trianglesScreen[tileTriIndices[start + i]];
-
+        
         float wp0 = tri.a0 * p.x + tri.b0 * p.y + tri.c0;
         float wp1 = tri.a1 * p.x + tri.b1 * p.y + tri.c1;
         float wp2 = tri.a2 * p.x + tri.b2 * p.y + tri.c2;
@@ -564,25 +538,32 @@ void RasterizeTiles(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         float b1 = wp1 * tri.rarea;
         float b2 = wp2 * tri.rarea;
 
-        float z = b0 * tri.rwz0 + b1 * tri.rwz1 + b2 * tri.rwz2;
+        float combinedWeight = b0 * tri.rw0 + b1 * tri.rw1 + b2 * tri.rw2;
+        if (combinedWeight == 0)
+        {
+            continue;
+        }
+        
+        float invWeight = 1.0f / combinedWeight;
+        
+        float z = (b0 * tri.rwz0 + b1 * tri.rwz1 + b2 * tri.rwz2) * invWeight;
         
         if (z >= pixelZ)
         {
             continue;
         }
         
-        float denom = b0 * tri.rw0 + b1 * tri.rw1 + b2 * tri.rw2;
-        
-        float2 num = b0 * tri.rwuv0 + b1 * tri.rwuv1 + b2 * tri.rwuv2;
-        
-        float2 uv = num / denom;
+        float2 uv = (b0 * tri.rwuv0 + b1 * tri.rwuv1 + b2 * tri.rwuv2) * invWeight;
 
         pixelZ = z;
         pixelCol = _MainTex.SampleLevel(sampler_MainTex, uv, 0);
     }
 
-    depthBuffer[did] = pixelZ;
-    colorBuffer[did] = pixelCol;
+    if (isValidPixel)
+    {
+        depthBuffer[did] = pixelZ;
+        colorBuffer[did] = pixelCol;
+    }
 }
 
 [numthreads(TILE_WIDTH, TILE_HEIGHT, 1)]
@@ -602,7 +583,7 @@ void ClearRendering(uint2 tid : SV_GroupThreadID, uint2 gid : SV_GroupID, uint2 
         if (tileIndex < tileCount)
         {
             tileOffsets[tileIndex] = 0;
-        }  
+        }
     }
     
     if (gid.x == 0 && gid.y == 0 && tid.x == 0 && tid.y == 0)

@@ -8,36 +8,24 @@ public class SoftwareRenderingGPU : MonoBehaviour
         public Vector2 v0;
         public Vector2 v1;
         public Vector2 v2;
-
-        public Vector2 uv0;
-        public Vector2 uv1;
-        public Vector2 uv2;
-
         public Vector2 rwuv0;
         public Vector2 rwuv1;
         public Vector2 rwuv2;
-
         public float rwz0;
         public float rwz1;
         public float rwz2;
-
         public float rw0;
         public float rw1;
         public float rw2;
-
         public float a0;
         public float b0;
         public float c0;
-
         public float a1;
         public float b1;
         public float c1;
-
         public float a2;
         public float b2;
         public float c2;
-
-        public float area;
         public float rarea;
     };
 
@@ -123,7 +111,6 @@ public class SoftwareRenderingGPU : MonoBehaviour
 
         rasterCS.SetBuffer(ClearRendering, "triangleScreenCounter", triangleCounterBuffer);
 
-        // Fixed buffer name string from "trianglesScreenRead" to "trianglesScreen"
         rasterCS.SetBuffer(TriangleBinning, "triangleScreenCounter", triangleCounterBuffer);
         rasterCS.SetBuffer(TriangleBinning, "trianglesScreen", triangleBuffer);
 
@@ -240,9 +227,9 @@ public class SoftwareRenderingGPU : MonoBehaviour
         rasterCS.SetTexture(ClearRendering, "depthBuffer", backDepth);
         rasterCS.Dispatch(ClearRendering, tilesX, tilesY, 1);
 
-        rasterCS.Dispatch(LocalTransform, triangleCount, 1, 1);
+        rasterCS.Dispatch(LocalTransform, Mathf.CeilToInt((float)triangleCount / 64f), 1, 1);
 
-        rasterCS.Dispatch(TriangleBinning, tilesX, tilesY, 1);
+        rasterCS.Dispatch(TriangleBinning, Mathf.CeilToInt((float)triangleCount * 4 / 64f), 1, 1);
 
         rasterCS.SetTexture(RasterizeTiles, "colorBuffer", backColor);
         rasterCS.SetTexture(RasterizeTiles, "depthBuffer", backDepth);
