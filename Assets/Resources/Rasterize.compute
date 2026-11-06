@@ -94,24 +94,25 @@ void LocalTransform(uint id : SV_DispatchThreadID)
     float4 world0 = mul(localToWorld, float4(vertices[i0], 1));
     float4 world1 = mul(localToWorld, float4(vertices[i1], 1));
     float4 world2 = mul(localToWorld, float4(vertices[i2], 1));
-
+    
     float4 view0 = mul(view, world0);
     float4 view1 = mul(view, world1);
     float4 view2 = mul(view, world2);
 
-    float4 clip0 = mul(proj, view0);
-    float4 clip1 = mul(proj, view1);
-    float4 clip2 = mul(proj, view2);
-    
-    float2 ce1 = clip1.xy * clip0.w - clip0.xy * clip1.w;
-    float2 ce2 = clip2.xy * clip0.w - clip0.xy * clip2.w;
+    float3 edge1 = view1.xyz - view0.xyz;
+    float3 edge2 = view2.xyz - view0.xyz;
+    float3 viewNormal = normalize(cross(edge1, edge2));
 
-    float clipDir = ce1.x * ce2.y - ce1.y * ce2.x;
-    
-    if (clipDir >= 0)
+    float3 camDir = normalize(-view0.xyz);
+
+    if (dot(viewNormal, camDir) >= 0)
     {
         return;
     }
+    
+    float4 clip0 = mul(proj, view0);
+    float4 clip1 = mul(proj, view1);
+    float4 clip2 = mul(proj, view2);
 
     int processcount = 0;
     
@@ -379,10 +380,6 @@ void LocalTransform(uint id : SV_DispatchThreadID)
             float invw1 = 1.0 / v1.w;
             float invw2 = 1.0 / v2.w;
             
-            float3 ndc0 = v0.xyz * invw0;
-            float3 ndc1 = v1.xyz * invw1;
-            float3 ndc2 = v2.xyz * invw2;
-            
             float2 rwuv0 = t0 * invw0;
             float2 rwuv1 = t1 * invw1;
             float2 rwuv2 = t2 * invw2;
@@ -391,24 +388,24 @@ void LocalTransform(uint id : SV_DispatchThreadID)
             float rwz1 = v1.z * invw1;
             float rwz2 = v2.z * invw2;
             
-            float2 s0 = ((ndc0.xy * 0.5 + 0.5) * resolution);
-            float2 s1 = ((ndc1.xy * 0.5 + 0.5) * resolution);
-            float2 s2 = ((ndc2.xy * 0.5 + 0.5) * resolution);
+            float2 s0 = ((v0.xy * invw0 * 0.5 + 0.5) * resolution);
+            float2 s1 = ((v1.xy * invw1 * 0.5 + 0.5) * resolution);
+            float2 s2 = ((v2.xy * invw2 * 0.5 + 0.5) * resolution);
             
             s1 = floor(s1) + 0.5;
             s0 = floor(s0) + 0.5;
             s2 = floor(s2) + 0.5;
             
-            float2 se1 = s1 - s0;
-            float2 se2 = s2 - s0;
-            float a = se1.x * se2.y - se1.y * se2.x;
-            
-            if (abs(a) < 1e-8f)
+            float area = (s0.y - s1.y) * s2.x +
+                         (s1.x - s0.x) * s2.y +
+                         (s0.x * s1.y - s0.y * s1.x);
+
+            if (abs(area) < 1e-5f || area > 0)
             {
                 continue;
             }
             
-            float inva = 1.0 / a;
+            float invarea = 1.0 / area;
 
             TriangleScreen outTri;
 
@@ -429,18 +426,18 @@ void LocalTransform(uint id : SV_DispatchThreadID)
             outTri.rw2 = invw2;
 
             outTri.a0 = s1.y - s2.y;
-            outTri.b0 = -(s1.x - s2.x);
+            outTri.b0 = s2.x - s1.x;
             outTri.c0 = s1.x * s2.y - s1.y * s2.x;
 
             outTri.a1 = s2.y - s0.y;
-            outTri.b1 = -(s2.x - s0.x);
+            outTri.b1 = s0.x - s2.x;
             outTri.c1 = s2.x * s0.y - s2.y * s0.x;
 
             outTri.a2 = s0.y - s1.y;
-            outTri.b2 = -(s0.x - s1.x);
+            outTri.b2 = s1.x - s0.x;
             outTri.c2 = s0.x * s1.y - s0.y * s1.x;
-
-            outTri.rarea = inva;
+            
+            outTri.rarea = invarea;
                     
             uint triId;
             InterlockedAdd(triangleScreenCounter[0], 1, triId);
@@ -458,10 +455,9 @@ void LocalTransform(uint id : SV_DispatchThreadID)
 }
 
 [numthreads(64, 1, 1)]
-void TriangleBinning(uint3 did : SV_DispatchThreadID)
+void TriangleBinning(uint id : SV_DispatchThreadID)
 {
     uint triCount = triangleScreenCounter[0];
-    uint id = did.x;
 
     if (id >= triCount)
     {
