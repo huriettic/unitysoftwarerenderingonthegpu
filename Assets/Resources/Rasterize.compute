@@ -458,7 +458,6 @@ void LocalTransform(uint id : SV_DispatchThreadID)
 void TriangleBinning(uint id : SV_DispatchThreadID)
 {
     uint triCount = triangleScreenCounter[0];
-
     if (id >= triCount)
     {
         return;
@@ -474,6 +473,22 @@ void TriangleBinning(uint id : SV_DispatchThreadID)
     int maxTileX = min((int) tilesX - 1, (int) (triMax.x / TILE_WIDTH));
     int maxTileY = min((int) tilesY - 1, (int) (triMax.y / TILE_HEIGHT));
 
+    float n0X = tri.a0;
+    float n0Y = tri.b0;
+    float n1X = tri.a1;
+    float n1Y = tri.b1;
+    float n2X = tri.a2;
+    float n2Y = tri.b2;
+
+    float triMin0 = min(n0X * tri.v0.x + n0Y * tri.v0.y, n0X * tri.v2.x + n0Y * tri.v2.y);
+    float triMax0 = max(n0X * tri.v0.x + n0Y * tri.v0.y, n0X * tri.v2.x + n0Y * tri.v2.y);
+
+    float triMin1 = min(n1X * tri.v1.x + n1Y * tri.v1.y, n1X * tri.v0.x + n1Y * tri.v0.y);
+    float triMax1 = max(n1X * tri.v1.x + n1Y * tri.v1.y, n1X * tri.v0.x + n1Y * tri.v0.y);
+
+    float triMin2 = min(n2X * tri.v2.x + n2Y * tri.v2.y, n2X * tri.v1.x + n2Y * tri.v1.y);
+    float triMax2 = max(n2X * tri.v2.x + n2Y * tri.v2.y, n2X * tri.v1.x + n2Y * tri.v1.y);
+   
     for (int y = minTileY; y <= maxTileY; ++y)
     {
         for (int x = minTileX; x <= maxTileX; ++x)
@@ -481,6 +496,92 @@ void TriangleBinning(uint id : SV_DispatchThreadID)
             uint tileIndex = y * tilesX + x;
             uint base = tileIndex * MAX_TRIS;
 
+            float tileMinX = x * TILE_WIDTH;
+            float tileMinY = y * TILE_HEIGHT;
+            float tileMaxX = tileMinX + TILE_WIDTH;
+            float tileMaxY = tileMinY + TILE_HEIGHT;
+        
+            float e0c0 = n0X * tileMinX + n0Y * tileMinY + tri.c0;
+            float e0c1 = n0X * tileMaxX + n0Y * tileMinY + tri.c0;
+            float e0c2 = n0X * tileMinX + n0Y * tileMaxY + tri.c0;
+            float e0c3 = n0X * tileMaxX + n0Y * tileMaxY + tri.c0;
+
+            if (e0c0 > 0 && e0c1 > 0 && e0c2 > 0 && e0c3 > 0)
+            {
+                continue;
+            }
+
+            float e1c0 = n1X * tileMinX + n1Y * tileMinY + tri.c1;
+            float e1c1 = n1X * tileMaxX + n1Y * tileMinY + tri.c1;
+            float e1c2 = n1X * tileMinX + n1Y * tileMaxY + tri.c1;
+            float e1c3 = n1X * tileMaxX + n1Y * tileMaxY + tri.c1;
+
+            if (e1c0 > 0 && e1c1 > 0 && e1c2 > 0 && e1c3 > 0)
+            {
+                continue;
+            }
+
+            float e2c0 = n2X * tileMinX + n2Y * tileMinY + tri.c2;
+            float e2c1 = n2X * tileMaxX + n2Y * tileMinY + tri.c2;
+            float e2c2 = n2X * tileMinX + n2Y * tileMaxY + tri.c2;
+            float e2c3 = n2X * tileMaxX + n2Y * tileMaxY + tri.c2;
+
+            if (e2c0 > 0 && e2c1 > 0 && e2c2 > 0 && e2c3 > 0)
+            {
+                continue;
+            }
+
+            if (e0c0 <= 0 && e0c1 <= 0 && e0c2 <= 0 && e0c3 <= 0 &&
+                e1c0 <= 0 && e1c1 <= 0 && e1c2 <= 0 && e1c3 <= 0 &&
+                e2c0 <= 0 && e2c1 <= 0 && e2c2 <= 0 && e2c3 <= 0)
+            {
+                uint prevCount;
+                InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
+
+                if (prevCount < MAX_TRIS)
+                {
+                    tileTriIndices[base + prevCount] = id;
+                }
+                
+                continue;
+            }
+
+            float p00 = e0c0 - tri.c0;
+            float p01 = e0c1 - tri.c0;
+            float p02 = e0c2 - tri.c0;
+            float p03 = e0c3 - tri.c0;
+            float tileMinProj0 = min(min(p00, p01), min(p02, p03));
+            float tileMaxProj0 = max(max(p00, p01), max(p02, p03));
+
+            if (tileMaxProj0 < triMin0 || tileMinProj0 > triMax0)
+            {
+                continue;
+            }
+
+            float p10 = e1c0 - tri.c1;
+            float p11 = e1c1 - tri.c1;
+            float p12 = e1c2 - tri.c1;
+            float p13 = e1c3 - tri.c1;
+            float tileMinProj1 = min(min(p10, p11), min(p12, p13));
+            float tileMaxProj1 = max(max(p10, p11), max(p12, p13));
+
+            if (tileMaxProj1 < triMin1 || tileMinProj1 > triMax1)
+            {
+                continue;
+            }
+
+            float p20 = e2c0 - tri.c2;
+            float p21 = e2c1 - tri.c2;
+            float p22 = e2c2 - tri.c2;
+            float p23 = e2c3 - tri.c2;
+            float tileMinProj2 = min(min(p20, p21), min(p22, p23));
+            float tileMaxProj2 = max(max(p20, p21), max(p22, p23));
+
+            if (tileMaxProj2 < triMin2 || tileMinProj2 > triMax2)
+            {
+                continue;
+            }
+        
             uint prevCount;
             InterlockedAdd(tileOffsets[tileIndex], 1, prevCount);
 
